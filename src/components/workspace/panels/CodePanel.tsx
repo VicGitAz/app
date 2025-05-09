@@ -8,8 +8,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Copy, Download, FileCode } from "lucide-react";
+import {
+  Copy,
+  Download,
+  FileCode,
+  Terminal as TerminalIcon,
+} from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
+import TerminalPanel from "./TerminalPanel";
 
 export default function CodePanel() {
   const [selectedFile, setSelectedFile] = useState("index.html");
@@ -17,6 +23,7 @@ export default function CodePanel() {
   const [parsedFiles, setParsedFiles] = useState<Record<string, string>>({
     "index.html": "<!-- No code generated yet -->",
   });
+  const [activeTab, setActiveTab] = useState("code");
   const { toast } = useToast();
 
   useEffect(() => {
@@ -109,65 +116,92 @@ export default function CodePanel() {
       <div className="p-3 border-b flex justify-between items-center">
         <div>
           <h3 className="font-medium text-lg">Code Editor</h3>
-          <p className="text-sm text-muted-foreground">View generated code</p>
+          <p className="text-sm text-muted-foreground">
+            View generated code and terminal
+          </p>
         </div>
         <div className="flex gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleCopyCode}
-            disabled={!generatedCode}
-          >
-            <Copy className="h-4 w-4 mr-1" /> Copy
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleDownloadCode}
-            disabled={!generatedCode}
-          >
-            <Download className="h-4 w-4 mr-1" /> Download
-          </Button>
-        </div>
-      </div>
-
-      <div className="flex-1 flex">
-        <div className="w-48 border-r p-2 overflow-auto">
-          <h4 className="text-sm font-medium mb-2 px-2">Files</h4>
-          <div className="space-y-1">
-            {Object.keys(parsedFiles).map((file) => (
-              <Button
-                key={file}
-                variant={selectedFile === file ? "secondary" : "ghost"}
-                className="w-full justify-start text-sm h-8"
-                onClick={() => setSelectedFile(file)}
-              >
-                <FileCode className="h-4 w-4 mr-2" />
-                {file}
-              </Button>
-            ))}
-          </div>
-
-          {generatedCode && (
-            <div className="mt-4 pt-4 border-t">
+          {activeTab === "code" && (
+            <>
               <Button
                 variant="outline"
                 size="sm"
-                className="w-full justify-center"
-                onClick={handleDownloadAll}
+                onClick={handleCopyCode}
+                disabled={!generatedCode}
               >
-                <Download className="h-4 w-4 mr-1" /> Download All
+                <Copy className="h-4 w-4 mr-1" /> Copy
               </Button>
-            </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleDownloadCode}
+                disabled={!generatedCode}
+              >
+                <Download className="h-4 w-4 mr-1" /> Download
+              </Button>
+            </>
           )}
         </div>
-
-        <div className="flex-1 bg-muted/10 relative">
-          <pre className="p-4 text-sm font-mono absolute inset-0 overflow-auto">
-            <code>{parsedFiles[selectedFile]}</code>
-          </pre>
-        </div>
       </div>
+
+      <Tabs
+        value={activeTab}
+        onValueChange={setActiveTab}
+        className="flex-1 flex flex-col"
+      >
+        <TabsList className="mx-3 mt-2">
+          <TabsTrigger value="code" className="flex items-center">
+            <FileCode className="h-4 w-4 mr-2" />
+            Code
+          </TabsTrigger>
+          <TabsTrigger value="terminal" className="flex items-center">
+            <TerminalIcon className="h-4 w-4 mr-2" />
+            Terminal
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="code" className="flex-1 flex p-0 m-0 border-none">
+          <div className="w-48 border-r p-2 overflow-auto">
+            <h4 className="text-sm font-medium mb-2 px-2">Files</h4>
+            <div className="space-y-1">
+              {Object.keys(parsedFiles).map((file) => (
+                <Button
+                  key={file}
+                  variant={selectedFile === file ? "secondary" : "ghost"}
+                  className="w-full justify-start text-sm h-8"
+                  onClick={() => setSelectedFile(file)}
+                >
+                  <FileCode className="h-4 w-4 mr-2" />
+                  {file}
+                </Button>
+              ))}
+            </div>
+
+            {generatedCode && (
+              <div className="mt-4 pt-4 border-t">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full justify-center"
+                  onClick={handleDownloadAll}
+                >
+                  <Download className="h-4 w-4 mr-1" /> Download All
+                </Button>
+              </div>
+            )}
+          </div>
+
+          <div className="flex-1 bg-muted/10 relative">
+            <pre className="p-4 text-sm font-mono absolute inset-0 overflow-auto">
+              <code>{parsedFiles[selectedFile]}</code>
+            </pre>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="terminal" className="flex-1 p-0 m-0 border-none">
+          <TerminalPanel className="h-full" />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

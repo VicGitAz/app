@@ -1,7 +1,7 @@
-// Gemini API integration
 export interface GeminiResponse {
   text: string;
   code?: string;
+  mermaidCode?: string;
   error?: string;
 }
 
@@ -18,6 +18,70 @@ export class GeminiProvider {
   constructor(config: GeminiConfig) {
     this.apiKey = config.apiKey;
     this.model = config.model || "gemini-2.5-flash-preview-04-17";
+  }
+
+  // Helper function to sanitize Mermaid labels and edge names
+  private sanitizeMermaidLabel(label: string): string {
+    return label
+      .replace(/[()":']/g, "") // Remove problematic characters
+      .replace(/\s+/g, " ") // Normalize spaces
+      .trim();
+  }
+
+  // Extract only text content, removing all code blocks
+  private extractTextOnly(fullText: string): string {
+    if (!fullText) return "";
+
+    // Remove all code blocks (mermaid, html, js, jsx, tsx, ts, css, etc.)
+    const cleanedText = fullText
+      .replace(/```(?:mermaid|html|js|jsx|tsx|ts|css|[^\s]*)?[\s\S]*?```/g, "")
+      .trim();
+
+    // If after removing code blocks we have nothing left, return something meaningful from the original text
+    if (!cleanedText && fullText) {
+      // Try to extract the first paragraph or sentence if there are no code blocks
+      const firstParagraph = fullText.split("\n\n")[0]?.trim();
+      if (firstParagraph && !firstParagraph.includes("```")) {
+        return firstParagraph;
+      }
+    }
+
+    return cleanedText;
+  }
+
+  // Extract all code blocks except mermaid
+  private extractCodeBlocks(fullText: string): string {
+    const codeRegex = /```(?!mermaid)([^\s]*)?[\s\S]*?```/g;
+    let match: RegExpExecArray | null;
+    let extractedCode = "";
+    const tempText = fullText.replace(/```mermaid[\s\S]*?```/g, ""); // Remove mermaid blocks first
+
+    // Match all remaining code blocks
+    while ((match = codeRegex.exec(tempText)) !== null) {
+      const codeContent = match[0]
+        .replace(/```[^\s]*?\s*\n/, "")
+        .replace(/\s*```$/, "");
+      extractedCode += codeContent + "\n\n";
+    }
+
+    return extractedCode.trim();
+  }
+
+  // Extract only mermaid code block
+  private extractMermaidCode(fullText: string): string | undefined {
+    const mermaidRegex = /```mermaid\s*\n([\s\S]*?)```/;
+    const mermaidMatch = fullText.match(mermaidRegex);
+
+    if (mermaidMatch) {
+      // Sanitize mermaid code
+      return mermaidMatch[1]
+        .trim()
+        .split("\n")
+        .map((line) => this.sanitizeMermaidLabel(line))
+        .join("\n");
+    }
+
+    return undefined;
   }
 
   async generateContent(prompt: string): Promise<GeminiResponse> {
@@ -57,29 +121,13 @@ export class GeminiProvider {
         };
       }
 
-      const text = data.candidates[0]?.content?.parts[0]?.text || "";
+      const fullText =
+        data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "";
 
-      // Extract code blocks if present
-      const codeRegex = /```([\s\S]*?)```/g;
-      const codeMatches = text.match(codeRegex);
-      let code = "";
-      let cleanText = text; // Create a new variable for text without code
-
-      if (codeMatches && codeMatches.length > 0) {
-        code = codeMatches
-          .map((match) =>
-            match
-              .replace(/```(?:html|jsx|javascript|js|tsx|ts)?\n?/g, "")
-              .replace(/```/g, "")
-          )
-          .join("\n\n");
-
-        // Remove code blocks from the text
-        cleanText = text.replace(codeRegex, "").trim();
-      }
       return {
-        text: cleanText, // Return the text without code
-        code: code || undefined,
+        text: this.extractTextOnly(fullText),
+        code: this.extractCodeBlocks(fullText) || undefined,
+        mermaidCode: this.extractMermaidCode(fullText),
       };
     } catch (error) {
       console.error("Error calling Gemini API:", error);
@@ -92,21 +140,66 @@ export class GeminiProvider {
   }
 
   async generateWebApp(prompt: string): Promise<GeminiResponse> {
-    const enhancedPrompt = `Create a complete web application based on the following requirements. 
-    Return the code in properly formatted code blocks with HTML, CSS, and JavaScript.
-    Make sure the application is fully functional and responsive.
-    
+    try {
+      // First generate the web app code and description
+      const webAppPrompt = `Create a complete web application based on the following requirements.
+Please provide:
+1. A brief explanation of the web application (this will be returned as text)
+2. The complete code in properly formatted code blocks
+
 User requirements: ${prompt}
 
-Provide the complete code for a single-page application with the following structure:
-1. HTML structure
-2. CSS styles (preferably using Tailwind classes)
-3. JavaScript functionality
+Structure your response like this:
+- First, write a paragraph or two explaining the web application, its features, and how it works
+- Then provide the complete code for a single-page application with:
+  a. HTML structure
+  b. CSS styles (Tailwind preferred)
+  c. JavaScript functionality
 
-Make sure all components work together and the application is ready to use.
+IMPORTANT: Return the complete code in a single HTML file with embedded CSS and JS.`;
 
-IMPORTANT: Return the complete code in a single HTML file with embedded CSS and JavaScript.`;
-    console.log("enhanced prompt: ", enhancedPrompt);
-    return this.generateContent(enhancedPrompt);
+      const webAppResponse = await this.generateContent(webAppPrompt);
+
+      // Then generate a mermaid diagram separately to ensure we get a good one
+      const mermaidPrompt = `Generate a Mermaid diagram that visualizes the key components and flow of a web application based on the following requirements.
+
+Use flowchart notation with proper syntax. Example: flowchart TD
+A[Component] --> B[Component]
+A -- action --> C[Component]
+
+User requirements: ${prompt}
+
+Only return the Mermaid diagram code without any explanation. The diagram should be detailed and correctly formatted.`;
+
+      const mermaidResponse = await this.generateContent(mermaidPrompt);
+
+      // Create a fallback mermaid diagram if none was returned
+      let finalMermaidCode = mermaidResponse.mermaidCode;
+      if (!finalMermaidCode) {
+        // Create a basic diagram as fallback
+        finalMermaidCode = `flowchart TD
+    User[User] --> App[Web Application]
+    App --> UI[User Interface]
+    UI --> Logic[Business Logic]
+    Logic --> Data[Data Management]`;
+      }
+
+      // Return combined response with guaranteed fields
+      return {
+        text: webAppResponse.text || "",
+        code: webAppResponse.code || "",
+        mermaidCode: finalMermaidCode,
+        error: webAppResponse.error || mermaidResponse.error,
+      };
+    } catch (error) {
+      console.error("Error generating web app:", error);
+      return {
+        text: "Failed to generate the web application.",
+        code: "",
+        mermaidCode: "flowchart TD\n    Error[Error Occurred]",
+        error:
+          error instanceof Error ? error.message : "Unknown error occurred",
+      };
+    }
   }
 }

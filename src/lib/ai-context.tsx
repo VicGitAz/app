@@ -15,13 +15,14 @@ interface AIContextType {
   configureClient: (
     apiKey: string,
     provider?: AIProviderType,
-    model?: string,
+    model?: string
   ) => void;
   isGenerating: boolean;
   generateApp: (prompt: string) => Promise<{
     text: string;
     code?: string;
     error?: string;
+    mermaidCode?: string;
   }>;
 }
 
@@ -49,7 +50,7 @@ export function AIProvider({ children }: { children: React.ReactNode }) {
   const configureClient = (
     apiKey: string,
     newProvider?: AIProviderType,
-    newModel?: string,
+    newModel?: string
   ) => {
     try {
       const providerToUse = newProvider || provider;

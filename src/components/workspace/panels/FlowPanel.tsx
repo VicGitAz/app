@@ -20,24 +20,46 @@ export default function FlowPanel() {
 
   // Listen for flow diagram updates
   useEffect(() => {
-    const handleFlowDiagramUpdate = async (event: CustomEvent) => {
+    const handleFlowDiagramUpdate = (event: CustomEvent) => {
       setIsLoading(true);
-      const { flowCode } = event.detail;
-      if (flowCode) {
-        setMermaidCode(flowCode);
-        renderMermaid(flowCode);
+      const { flowDiagram } = event.detail;
+
+      if (flowDiagram && mermaidRef.current) {
+        // The event now provides the rendered SVG directly
+        mermaidRef.current.innerHTML = flowDiagram;
+        setIsLoading(false);
+      } else {
+        setTimeout(() => setIsLoading(false), 500);
       }
-      setTimeout(() => setIsLoading(false), 500);
     };
 
-    window.addEventListener(
+    const handleMermaidCodeUpdate = (event: CustomEvent) => {
+      const { mermaidCode } = event.detail;
+      if (mermaidCode) {
+        setMermaidCode(mermaidCode);
+      }
+    };
+
+    // Add both event listeners
+    document.addEventListener(
       "flow-diagram-update",
-      handleFlowDiagramUpdate as EventListener,
+      handleFlowDiagramUpdate as EventListener
     );
+
+    document.addEventListener(
+      "mermaid-code-update",
+      handleMermaidCodeUpdate as EventListener
+    );
+
+    // Clean up both event listeners
     return () => {
-      window.removeEventListener(
+      document.removeEventListener(
         "flow-diagram-update",
-        handleFlowDiagramUpdate as EventListener,
+        handleFlowDiagramUpdate as EventListener
+      );
+      document.removeEventListener(
+        "mermaid-code-update",
+        handleMermaidCodeUpdate as EventListener
       );
     };
   }, []);

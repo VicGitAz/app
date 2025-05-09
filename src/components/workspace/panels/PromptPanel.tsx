@@ -22,6 +22,7 @@ export default function PromptPanel() {
     text: string;
     code?: string;
     error?: string;
+    mermaidCode?: string;
   } | null>(null);
   const [selectedFeatures, setSelectedFeatures] = useState<string[]>([
     "responsive",
@@ -36,46 +37,35 @@ export default function PromptPanel() {
     });
   }, []);
 
+  // Render mermaid diagram when result.mermaidCode changes
+  useEffect(() => {
+    if (result?.mermaidCode) {
+      try {
+        mermaid.render("flow-diagram", result.mermaidCode).then(({ svg }) => {
+          // Dispatch event with the SVG
+          const flowEvent = new CustomEvent("flow-diagram-update", {
+            detail: { flowDiagram: svg },
+          });
+          document.dispatchEvent(flowEvent);
+
+          // Add this new event dispatch for the mermaid code
+          const mermaidCodeEvent = new CustomEvent("mermaid-code-update", {
+            detail: { mermaidCode: result.mermaidCode },
+          });
+          document.dispatchEvent(mermaidCodeEvent);
+        });
+      } catch (error) {
+        console.error("Error rendering mermaid diagram:", error);
+      }
+    }
+  }, [result?.mermaidCode]);
+
   const toggleFeature = (feature: string) => {
     setSelectedFeatures((prev) =>
       prev.includes(feature)
         ? prev.filter((f) => f !== feature)
         : [...prev, feature]
     );
-  };
-
-  const generateFlowDiagram = (prompt: string, features: string[]) => {
-    // Create a simple flow diagram based on the prompt and features
-    const flowCode = `graph TD
-      Start[User Interaction] --> App[Web Application]
-      App --> Features[Features]
-      ${features
-        .map((feature, index) => `Features --> Feature${index}[${feature}]`)
-        .join("\n      ")}
-      App --> UI[User Interface]
-      UI --> Components[Components]
-      Components --> Layout[Layout]
-      Components --> Styling[Styling]
-      App --> Functionality[Functionality]
-      ${
-        prompt.length > 50
-          ? `Functionality --> MainFunction["${prompt.substring(0, 50)}..."]`
-          : `Functionality --> MainFunction["${prompt}"]`
-      }
-    `;
-
-    // Render the diagram
-    try {
-      mermaid.render("flow-diagram", flowCode).then(({ svg }) => {
-        // Dispatch event with the SVG
-        const flowEvent = new CustomEvent("flow-diagram-update", {
-          detail: { flowDiagram: svg },
-        });
-        window.dispatchEvent(flowEvent);
-      });
-    } catch (error) {
-      console.error("Error generating flow diagram:", error);
-    }
   };
 
   const handleGenerate = async () => {
@@ -92,9 +82,6 @@ export default function PromptPanel() {
     });
     document.dispatchEvent(userChatEvent);
 
-    // Generate flow diagram
-    generateFlowDiagram(prompt, selectedFeatures);
-
     // Enhance prompt with selected features
     const enhancedPrompt = `
       Create a web application with the following requirements:\n
@@ -104,10 +91,10 @@ export default function PromptPanel() {
     `;
 
     const response = await generateApp(enhancedPrompt);
-    console.log("promt;", response.text);
+    console.log("mermaid code:", response.mermaidCode);
     setResult(response);
 
-    // Add AI response to chat - THIS IS THE KEY CHANGE
+    // Add AI response to chat
     const aiChatEvent = new CustomEvent("chat-update", {
       detail: {
         id: (Date.now() + 1).toString(),
