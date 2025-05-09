@@ -30,14 +30,14 @@ export default function PreviewPanel() {
       setTimeout(() => setIsLoading(false), 1000);
     };
 
-    window.addEventListener(
+    document.addEventListener(
       "app-preview-update",
-      handleAppPreviewUpdate as EventListener,
+      handleAppPreviewUpdate as EventListener
     );
     return () => {
-      window.removeEventListener(
+      document.removeEventListener(
         "app-preview-update",
-        handleAppPreviewUpdate as EventListener,
+        handleAppPreviewUpdate as EventListener
       );
     };
   }, []);
@@ -93,7 +93,7 @@ export default function PreviewPanel() {
 
     const blob = new Blob([generatedCode], { type: "text/html" });
     const url = URL.createObjectURL(blob);
-    window.open(url, "_blank");
+    document.open(url, "_blank");
   };
 
   return (
@@ -155,7 +155,9 @@ export default function PreviewPanel() {
 
       <div className="flex-1 bg-muted/30 p-4 flex items-center justify-center overflow-auto">
         <div
-          className={`bg-white border rounded-md shadow-sm overflow-hidden transition-all duration-300 ${viewMode === "mobile" ? "w-[375px] h-[667px]" : "w-full h-full"}`}
+          className={`bg-white border rounded-md shadow-sm overflow-hidden transition-all duration-300 ${
+            viewMode === "mobile" ? "w-[375px] h-[667px]" : "w-full h-full"
+          }`}
         >
           {isLoading ? (
             <div className="h-full w-full flex items-center justify-center">
