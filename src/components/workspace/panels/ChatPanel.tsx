@@ -5,6 +5,8 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Send, Download } from "lucide-react";
 import { useAuth } from "../../../../supabase/auth";
+import ReactMarkdown from "react-markdown";
+import { useAI } from "@/lib/ai-context";
 
 type Message = {
   id: string;
@@ -15,6 +17,7 @@ type Message = {
 
 export default function ChatPanel() {
   const { user } = useAuth();
+  const { isConfigured, provider, model, isGenerating, generateApp } = useAI();
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -35,16 +38,17 @@ export default function ChatPanel() {
         id: id || Date.now().toString(),
         content: content,
         sender: sender,
-        timestamp: timestamp || new Date(),
+        timestamp: new Date(timestamp), // Parse the timestamp string
       };
       setMessages((prev) => [...prev, newMessage]);
     };
 
-    window.addEventListener("chat-update", handleChatUpdate as EventListener);
+    // Add the event listener to document instead of window
+    document.addEventListener("chat-update", handleChatUpdate as EventListener);
     return () => {
-      window.removeEventListener(
+      document.removeEventListener(
         "chat-update",
-        handleChatUpdate as EventListener,
+        handleChatUpdate as EventListener
       );
     };
   }, []);
@@ -53,7 +57,7 @@ export default function ChatPanel() {
   useEffect(() => {
     if (scrollAreaRef.current) {
       const scrollContainer = scrollAreaRef.current.querySelector(
-        "[data-radix-scroll-area-viewport]",
+        "[data-radix-scroll-area-viewport]"
       );
       if (scrollContainer) {
         setTimeout(() => {
@@ -63,8 +67,8 @@ export default function ChatPanel() {
     }
   }, [messages]);
 
-  const handleSendMessage = () => {
-    if (!input.trim()) return;
+  const handleSendMessage = async () => {
+    if (!input.trim() || !isConfigured) return;
 
     // Add user message
     const userMessage: Message = {
@@ -75,19 +79,52 @@ export default function ChatPanel() {
     };
 
     setMessages((prev) => [...prev, userMessage]);
+
+    // Clear input field
+    const userQuery = input;
     setInput("");
 
-    // Simulate AI response
-    setTimeout(() => {
-      const aiMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        content:
-          "I'm analyzing your request. In a real implementation, this would connect to an LLM API like OpenAI, Claude, or Gemini to provide intelligent responses.",
-        sender: "ai",
-        timestamp: new Date(),
-      };
-      setMessages((prev) => [...prev, aiMessage]);
-    }, 1000);
+    // Show loading indicator
+    const loadingId = Date.now() + 1;
+    const loadingMessage: Message = {
+      id: loadingId.toString(),
+      content: "Thinking...",
+      sender: "ai",
+      timestamp: new Date(),
+    };
+
+    setMessages((prev) => [...prev, loadingMessage]);
+
+    try {
+      // Send to AI and get response
+      const response = await generateApp(userQuery);
+
+      // Remove loading message and add actual response
+      setMessages((prev) =>
+        prev
+          .filter((msg) => msg.id !== loadingId.toString())
+          .concat({
+            id: (Date.now() + 2).toString(),
+            content: response.text || "Sorry, I couldn't generate a response.",
+            sender: "ai",
+            timestamp: new Date(),
+          })
+      );
+    } catch (error) {
+      // Handle error
+      setMessages((prev) =>
+        prev
+          .filter((msg) => msg.id !== loadingId.toString())
+          .concat({
+            id: (Date.now() + 2).toString(),
+            content:
+              "Sorry, there was an error processing your request. Please try again.",
+            sender: "ai",
+            timestamp: new Date(),
+          })
+      );
+      console.error("Error generating response:", error);
+    }
   };
 
   const handleExportChat = () => {
@@ -96,7 +133,10 @@ export default function ChatPanel() {
     const chatText = messages
       .map(
         (msg) =>
-          `[${msg.timestamp.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}] ${msg.sender === "user" ? "You" : "AI"}: ${msg.content}`,
+          `[${msg.timestamp.toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+          })}] ${msg.sender === "user" ? "You" : "AI"}: ${msg.content}`
       )
       .join("\n\n");
 
@@ -135,10 +175,16 @@ export default function ChatPanel() {
           {messages.map((message) => (
             <div
               key={message.id}
-              className={`flex ${message.sender === "user" ? "justify-end" : "justify-start"}`}
+              className={`flex ${
+                message.sender === "user" ? "justify-end" : "justify-start"
+              }`}
             >
               <div
-                className={`max-w-[80%] rounded-lg p-3 ${message.sender === "user" ? "bg-primary text-primary-foreground" : "bg-muted"}`}
+                className={`max-w-[80%] rounded-lg p-3 ${
+                  message.sender === "user"
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted"
+                }`}
               >
                 {message.sender === "ai" && (
                   <div className="flex items-center mb-2">
@@ -149,7 +195,9 @@ export default function ChatPanel() {
                     <span className="text-xs font-medium">AI Assistant</span>
                   </div>
                 )}
-                <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                <p className="text-sm whitespace-pre-wrap">
+                  <ReactMarkdown>{message.content}</ReactMarkdown>
+                </p>
                 <span className="text-xs opacity-70 block text-right mt-1">
                   {message.timestamp.toLocaleTimeString([], {
                     hour: "2-digit",

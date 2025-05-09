@@ -63,19 +63,22 @@ export class GeminiProvider {
       const codeRegex = /```([\s\S]*?)```/g;
       const codeMatches = text.match(codeRegex);
       let code = "";
+      let cleanText = text; // Create a new variable for text without code
 
       if (codeMatches && codeMatches.length > 0) {
         code = codeMatches
           .map((match) =>
             match
               .replace(/```(?:html|jsx|javascript|js|tsx|ts)?\n?/g, "")
-              .replace(/```/g, ""),
+              .replace(/```/g, "")
           )
           .join("\n\n");
-      }
 
+        // Remove code blocks from the text
+        cleanText = text.replace(codeRegex, "").trim();
+      }
       return {
-        text,
+        text: cleanText, // Return the text without code
         code: code || undefined,
       };
     } catch (error) {
@@ -103,7 +106,7 @@ Provide the complete code for a single-page application with the following struc
 Make sure all components work together and the application is ready to use.
 
 IMPORTANT: Return the complete code in a single HTML file with embedded CSS and JavaScript.`;
-
+    console.log("enhanced prompt: ", enhancedPrompt);
     return this.generateContent(enhancedPrompt);
   }
 }

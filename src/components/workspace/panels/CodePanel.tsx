@@ -26,14 +26,14 @@ export default function CodePanel() {
       parseCodeIntoFiles(event.detail.code);
     };
 
-    window.addEventListener(
+    document.addEventListener(
       "app-preview-update",
-      handleAppPreviewUpdate as EventListener,
+      handleAppPreviewUpdate as EventListener
     );
     return () => {
-      window.removeEventListener(
+      document.removeEventListener(
         "app-preview-update",
-        handleAppPreviewUpdate as EventListener,
+        handleAppPreviewUpdate as EventListener
       );
     };
   }, []);
@@ -57,7 +57,7 @@ export default function CodePanel() {
     }
 
     setParsedFiles(files);
-    setSelectedFile("index.html"); // Reset to index.html when new code is generated
+    setSelectedFile("index.html");
   };
 
   const handleCopyCode = () => {
@@ -77,8 +77,8 @@ export default function CodePanel() {
       type: selectedFile.endsWith(".html")
         ? "text/html"
         : selectedFile.endsWith(".css")
-          ? "text/css"
-          : "application/javascript",
+        ? "text/css"
+        : "application/javascript",
     });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -162,8 +162,8 @@ export default function CodePanel() {
           )}
         </div>
 
-        <div className="flex-1 overflow-auto bg-muted/10">
-          <pre className="p-4 text-sm font-mono overflow-auto h-full">
+        <div className="flex-1 bg-muted/10 relative">
+          <pre className="p-4 text-sm font-mono absolute inset-0 overflow-auto">
             <code>{parsedFiles[selectedFile]}</code>
           </pre>
         </div>

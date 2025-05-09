@@ -40,7 +40,7 @@ export default function PromptPanel() {
     setSelectedFeatures((prev) =>
       prev.includes(feature)
         ? prev.filter((f) => f !== feature)
-        : [...prev, feature],
+        : [...prev, feature]
     );
   };
 
@@ -49,7 +49,9 @@ export default function PromptPanel() {
     const flowCode = `graph TD
       Start[User Interaction] --> App[Web Application]
       App --> Features[Features]
-      ${features.map((feature, index) => `Features --> Feature${index}[${feature}]`).join("\n      ")}
+      ${features
+        .map((feature, index) => `Features --> Feature${index}[${feature}]`)
+        .join("\n      ")}
       App --> UI[User Interface]
       UI --> Components[Components]
       Components --> Layout[Layout]
@@ -81,9 +83,14 @@ export default function PromptPanel() {
 
     // Add a message to the chat
     const userChatEvent = new CustomEvent("chat-update", {
-      detail: { role: "user", content: prompt },
+      detail: {
+        sender: "user",
+        content: prompt,
+        id: Date.now().toString(),
+        timestamp: new Date().toISOString(),
+      },
     });
-    window.dispatchEvent(userChatEvent);
+    document.dispatchEvent(userChatEvent);
 
     // Generate flow diagram
     generateFlowDiagram(prompt, selectedFeatures);
@@ -97,23 +104,28 @@ export default function PromptPanel() {
     `;
 
     const response = await generateApp(enhancedPrompt);
+    console.log("promt;", response.text);
     setResult(response);
 
-    // Add AI response to chat
+    // Add AI response to chat - THIS IS THE KEY CHANGE
     const aiChatEvent = new CustomEvent("chat-update", {
       detail: {
-        role: "assistant",
-        content: `I've generated a web application based on your requirements:\n\n${response.text}\n\nYou can see the preview and code in their respective panels.`,
+        id: (Date.now() + 1).toString(),
+        sender: "ai",
+        content:
+          response.text ||
+          "I've processed your request, but there was an issue generating the application.",
+        timestamp: new Date().toISOString(),
       },
     });
-    window.dispatchEvent(aiChatEvent);
+    document.dispatchEvent(aiChatEvent);
 
     // Send the generated code to the preview panel
     if (response.code) {
       const previewEvent = new CustomEvent("app-preview-update", {
         detail: { code: response.code },
       });
-      window.dispatchEvent(previewEvent);
+      document.dispatchEvent(previewEvent);
     }
   };
 
@@ -274,7 +286,7 @@ export default function PromptPanel() {
                 className="p-3 bg-gray-50 rounded-md cursor-pointer hover:bg-gray-100"
                 onClick={() =>
                   setPrompt(
-                    "Create a personal portfolio website with a hero section, about me, skills, projects, and contact form.",
+                    "Create a personal portfolio website with a hero section, about me, skills, projects, and contact form."
                   )
                 }
               >
@@ -287,7 +299,7 @@ export default function PromptPanel() {
                 className="p-3 bg-gray-50 rounded-md cursor-pointer hover:bg-gray-100"
                 onClick={() =>
                   setPrompt(
-                    "Build a task management app with the ability to create, edit, and delete tasks. Include task categories and priority levels.",
+                    "Build a task management app with the ability to create, edit, and delete tasks. Include task categories and priority levels."
                   )
                 }
               >
@@ -300,7 +312,7 @@ export default function PromptPanel() {
                 className="p-3 bg-gray-50 rounded-md cursor-pointer hover:bg-gray-100"
                 onClick={() =>
                   setPrompt(
-                    "Create a weather dashboard that shows current weather and 5-day forecast for a city. Include temperature, humidity, and wind speed.",
+                    "Create a weather dashboard that shows current weather and 5-day forecast for a city. Include temperature, humidity, and wind speed."
                   )
                 }
               >
