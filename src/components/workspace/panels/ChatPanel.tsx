@@ -8,6 +8,22 @@ import { useAuth } from "../../../../supabase/auth";
 import ReactMarkdown from "react-markdown";
 import { useAI } from "@/lib/ai-context";
 
+// Define custom components for react-markdown to apply styles and reduce spacing
+const components = {
+  p: ({ node, ...props }) => (
+    // Apply a smaller bottom margin to paragraphs to control spacing between them
+    <p className="mb-1" {...props} />
+  ),
+  // You can add other components here if needed for styling other markdown elements (e.g., h1, li)
+  // Example:
+  // h1: ({ node, ...props }) => (
+  //   <h1 className="text-xl font-bold mt-4 mb-2" {...props} />
+  // ),
+  // li: ({ node, ...props }) => (
+  //   <li className="mb-0" {...props} />
+  // ),
+};
+
 type Message = {
   id: string;
   content: string;
@@ -195,9 +211,14 @@ export default function ChatPanel() {
                     <span className="text-xs font-medium">AI Assistant</span>
                   </div>
                 )}
-                <p className="text-sm whitespace-pre-wrap">
+                {/* <p className="text-sm whitespace-pre-wrap">
                   <ReactMarkdown>{message.content}</ReactMarkdown>
-                </p>
+                </p> */}
+                <div className="text-sm whitespace-pre-wrap leading-tight">
+                  <ReactMarkdown components={components}>
+                    {message.content}
+                  </ReactMarkdown>
+                </div>
                 <span className="text-xs opacity-70 block text-right mt-1">
                   {message.timestamp.toLocaleTimeString([], {
                     hour: "2-digit",
