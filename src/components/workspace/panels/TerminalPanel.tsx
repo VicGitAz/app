@@ -13,10 +13,12 @@ export default function TerminalPanel({ className }: TerminalPanelProps) {
   const terminalRef = useRef<HTMLDivElement>(null);
   const [terminal, setTerminal] = useState<Terminal | null>(null);
   const [fitAddon, setFitAddon] = useState<FitAddon | null>(null);
-  const [isMaximized, setIsMaximized] = useState(false);
-  const [isMinimized, setIsMinimized] = useState(false);
+  const [socket, setSocket] = useState<WebSocket | null>(null);
+  const [isConnected, setIsConnected] = useState<boolean>(false);
+  const socketRef = useRef<WebSocket | null>(null);
+  const terminalInstanceRef = useRef<Terminal | null>(null);
 
-  // Initialize terminal on component mount
+  // Initialize terminal and websocket connection on component mount
   useEffect(() => {
     // Create terminal instance
     const term = new Terminal({
@@ -27,8 +29,9 @@ export default function TerminalPanel({ className }: TerminalPanelProps) {
       },
       fontSize: 14,
       fontFamily: "monospace",
-      scrollback: 1000,
     });
+
+    terminalInstanceRef.current = term;
 
     // Create fit addon to resize terminal
     const fit = new FitAddon();
@@ -43,193 +46,114 @@ export default function TerminalPanel({ className }: TerminalPanelProps) {
       setTerminal(term);
       setFitAddon(fit);
 
-      // Initial greeting
-      term.writeln("\x1b[1;32mWeb Terminal\x1b[0m");
-      term.writeln("Type \x1b[1;34mhelp\x1b[0m for available commands.");
-      term.write("\r\n$ ");
+      // Connect to WebSocket server for terminal backend
+      const ws = new WebSocket("ws://localhost:3001");
+      socketRef.current = ws;
 
-      // Handle terminal input
-      let currentCommand = "";
+      ws.onopen = () => {
+        console.log("WebSocket connection established");
+        setIsConnected(true);
+        term.writeln("\r\n\x1b[1;32mConnected to terminal server\x1b[0m");
+        term.writeln(
+          "Terminal is ready. You can run npm, git, and bash commands."
+        );
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === "output") {
+            term.write(data.content);
+          }
+        } catch (error) {
+          console.error("Error processing message:", error);
+          term.writeln("\r\n\x1b[1;31mError processing server message\x1b[0m");
+        }
+      };
+
+      ws.onerror = (error) => {
+        console.error("WebSocket error:", error);
+        term.writeln(
+          "\r\n\x1b[1;31mError connecting to terminal server\x1b[0m"
+        );
+        term.writeln("Please check if the terminal server is running.");
+      };
+
+      ws.onclose = () => {
+        console.log("WebSocket connection closed");
+        setIsConnected(false);
+        term.writeln("\r\n\x1b[1;31mDisconnected from terminal server\x1b[0m");
+        term.writeln("Terminal connection closed. Trying to reconnect...");
+
+        // Attempt to reconnect after 3 seconds
+        setTimeout(() => {
+          if (terminalRef.current) {
+            if (ws.readyState !== WebSocket.CONNECTING) {
+              ws.close();
+              setSocket(null);
+              socketRef.current = null;
+            }
+          }
+        }, 3000);
+      };
+
+      setSocket(ws);
+
+      // Set up terminal key handling
+      term.onKey(({ key, domEvent }) => {
+        if (ws.readyState === WebSocket.OPEN) {
+          // Check for Ctrl-C
+          if (domEvent.ctrlKey && domEvent.key === "c") {
+            ws.send(JSON.stringify({ type: "SIGINT" }));
+          } else {
+            // Send any other key directly to the server
+            ws.send(JSON.stringify({ type: "key", key }));
+          }
+        }
+      });
+
+      // Also handle paste events
       term.onData((data) => {
-        switch (data) {
-          case "\r": // Enter
-            term.writeln("");
-            processCommand(currentCommand, term);
-            currentCommand = "";
-            term.write("$ ");
-            break;
-          case "\u007F": // Backspace
-            if (currentCommand.length > 0) {
-              currentCommand = currentCommand.slice(0, -1);
-              term.write("\b \b");
-            }
-            break;
-          case "\u0003": // Ctrl+C
-            term.writeln("^C");
-            currentCommand = "";
-            term.write("$ ");
-            break;
-          default:
-            // Print printable characters
-            if (data >= " " || data === "\t") {
-              currentCommand += data;
-              term.write(data);
-            }
+        if (ws.readyState === WebSocket.OPEN) {
+          // If this is a large chunk of data (likely a paste), send it as a paste event
+          if (data.length > 1) {
+            ws.send(JSON.stringify({ type: "paste", data }));
+          }
         }
       });
     }
 
     // Clean up
     return () => {
-      term.dispose();
+      if (socketRef.current) {
+        socketRef.current.close();
+        socketRef.current = null;
+      }
+      if (terminalInstanceRef.current) {
+        terminalInstanceRef.current.dispose();
+        terminalInstanceRef.current = null;
+      }
     };
   }, []);
 
-  // Handle terminal resize when window size changes
-  useEffect(() => {
-    const handleResize = () => {
-      if (fitAddon) {
-        setTimeout(() => {
-          fitAddon.fit();
-        }, 0);
-      }
-    };
-
-    window.addEventListener("resize", handleResize);
-    return () => {
-      window.removeEventListener("resize", handleResize);
-    };
-  }, [fitAddon]);
-
-  // Process commands entered in the terminal
-  const processCommand = (command: string, term: Terminal) => {
-    const trimmedCommand = command.trim();
-
-    if (!trimmedCommand) return;
-
-    const [cmd, ...args] = trimmedCommand.split(" ");
-
-    switch (cmd.toLowerCase()) {
-      case "help":
-        term.writeln("Available commands:");
-        term.writeln("  help         - Show this help message");
-        term.writeln("  clear        - Clear the terminal");
-        term.writeln("  echo [text]  - Echo text back to the terminal");
-        term.writeln(
-          "  ls           - List files in current directory (simulation)"
-        );
-        term.writeln("  date         - Show current date and time");
-        term.writeln("  whoami       - Show current user");
-        term.writeln("  exit         - Minimize the terminal");
-        break;
-
-      case "clear":
-        term.clear();
-        break;
-
-      case "echo":
-        term.writeln(args.join(" "));
-        break;
-
-      case "ls":
-        term.writeln("index.html");
-        term.writeln("styles.css");
-        term.writeln("script.js");
-        term.writeln("package.json");
-        break;
-
-      case "date":
-        term.writeln(new Date().toString());
-        break;
-
-      case "whoami":
-        term.writeln("web-user");
-        break;
-
-      case "exit":
-        setIsMinimized(true);
-        break;
-
-      default:
-        term.writeln(`Command not found: ${cmd}`);
+  // Focus the terminal when clicked
+  const focusTerminal = () => {
+    if (terminalInstanceRef.current) {
+      terminalInstanceRef.current.focus();
     }
-  };
-
-  // Handle terminal window state changes
-  const toggleMaximize = () => {
-    setIsMaximized(!isMaximized);
-    setTimeout(() => {
-      if (fitAddon) fitAddon.fit();
-    }, 0);
-  };
-
-  const toggleMinimize = () => {
-    setIsMinimized(!isMinimized);
-    setTimeout(() => {
-      if (fitAddon) fitAddon.fit();
-    }, 0);
   };
 
   return (
     <div
-      className={`flex flex-col ${className || ""} ${
-        isMinimized ? "h-10" : "h-full"
-      } bg-gray-900 rounded-lg border border-gray-700 shadow-lg transition-all duration-300 overflow-hidden ${
-        isMaximized ? "fixed inset-4 z-50" : ""
-      }`}
+      className={`flex flex-col ${
+        className || ""
+      } bg-[#1a1a1a] border border-gray-700 shadow-lg transition-all duration-300 overflow-y-auto`}
     >
-      {/* Terminal header */}
-      <div className="flex items-center justify-between p-2 bg-gray-800 border-b border-gray-700">
-        <div className="flex items-center gap-2">
-          <TerminalIcon className="h-4 w-4 text-green-400" />
-          <span className="text-sm font-medium text-gray-200">Terminal</span>
-        </div>
-        <div className="flex gap-1">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-6 w-6 p-0"
-            onClick={toggleMinimize}
-          >
-            {isMinimized ? (
-              <Maximize className="h-3 w-3 text-gray-400" />
-            ) : (
-              <Minimize className="h-3 w-3 text-gray-400" />
-            )}
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-6 w-6 p-0"
-            onClick={toggleMaximize}
-            disabled={isMinimized}
-          >
-            <Maximize className="h-3 w-3 text-gray-400" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-6 w-6 p-0"
-            onClick={() => setIsMinimized(true)}
-          >
-            <X className="h-3 w-3 text-gray-400" />
-          </Button>
-        </div>
-      </div>
-
       {/* Terminal content */}
-      {!isMinimized && <div ref={terminalRef} className="flex-1" />}
-
-      {/* Minimized terminal button */}
-      {isMinimized && (
-        <Button
-          variant="ghost"
-          className="w-full h-6 text-xs text-gray-300"
-          onClick={() => setIsMinimized(false)}
-        >
-          <TerminalIcon className="h-3 w-3 mr-1" /> Click to open terminal
-        </Button>
-      )}
+      <div className="flex-1 overflow-y-auto relative" onClick={focusTerminal}>
+        <div ref={terminalRef} className="w-full h-full" />
+        <div id="terminal-scroll-anchor" className="bg-[#1a1a1a] pb-4" />
+      </div>
     </div>
   );
 }
