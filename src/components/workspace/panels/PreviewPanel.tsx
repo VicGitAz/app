@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -7,15 +7,93 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Laptop, Smartphone, RefreshCw, ExternalLink } from "lucide-react";
+import {
+  Code,
+  Download,
+  Laptop,
+  Smartphone,
+  RefreshCw,
+  ExternalLink,
+} from "lucide-react";
 
 export default function PreviewPanel() {
   const [viewMode, setViewMode] = useState<"desktop" | "mobile">("desktop");
   const [isLoading, setIsLoading] = useState(false);
+  const [generatedCode, setGeneratedCode] = useState<string | null>(null);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  useEffect(() => {
+    // Listen for code updates from the prompt panel
+    const handleAppPreviewUpdate = (event: CustomEvent) => {
+      setIsLoading(true);
+      setGeneratedCode(event.detail.code);
+      setTimeout(() => setIsLoading(false), 1000);
+    };
+
+    window.addEventListener(
+      "app-preview-update",
+      handleAppPreviewUpdate as EventListener,
+    );
+    return () => {
+      window.removeEventListener(
+        "app-preview-update",
+        handleAppPreviewUpdate as EventListener,
+      );
+    };
+  }, []);
+
+  useEffect(() => {
+    if (generatedCode && iframeRef.current) {
+      const iframe = iframeRef.current;
+      const iframeDoc =
+        iframe.contentDocument || iframe.contentWindow?.document;
+
+      if (iframeDoc) {
+        iframeDoc.open();
+        iframeDoc.write(generatedCode);
+        iframeDoc.close();
+      }
+    }
+  }, [generatedCode, isLoading]);
 
   const handleRefresh = () => {
     setIsLoading(true);
-    setTimeout(() => setIsLoading(false), 1500);
+    setTimeout(() => {
+      if (iframeRef.current && generatedCode) {
+        const iframe = iframeRef.current;
+        const iframeDoc =
+          iframe.contentDocument || iframe.contentWindow?.document;
+
+        if (iframeDoc) {
+          iframeDoc.open();
+          iframeDoc.write(generatedCode);
+          iframeDoc.close();
+        }
+      }
+      setIsLoading(false);
+    }, 1000);
+  };
+
+  const handleDownload = () => {
+    if (!generatedCode) return;
+
+    const blob = new Blob([generatedCode], { type: "text/html" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "generated-app.html";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const openInNewTab = () => {
+    if (!generatedCode) return;
+
+    const blob = new Blob([generatedCode], { type: "text/html" });
+    const url = URL.createObjectURL(blob);
+    window.open(url, "_blank");
   };
 
   return (
@@ -46,13 +124,31 @@ export default function PreviewPanel() {
               <Smartphone className="h-4 w-4" />
             </Button>
           </div>
-          <Button variant="outline" size="sm" onClick={handleRefresh}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleRefresh}
+            disabled={!generatedCode}
+          >
             <RefreshCw
               className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`}
             />
           </Button>
-          <Button variant="outline" size="sm">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={openInNewTab}
+            disabled={!generatedCode}
+          >
             <ExternalLink className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleDownload}
+            disabled={!generatedCode}
+          >
+            <Download className="h-4 w-4" />
           </Button>
         </div>
       </div>
@@ -65,6 +161,13 @@ export default function PreviewPanel() {
             <div className="h-full w-full flex items-center justify-center">
               <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full"></div>
             </div>
+          ) : generatedCode ? (
+            <iframe
+              ref={iframeRef}
+              className="w-full h-full border-0"
+              title="Generated App Preview"
+              sandbox="allow-scripts allow-same-origin allow-forms"
+            />
           ) : (
             <div className="h-full w-full flex flex-col items-center justify-center p-4 text-center">
               <div className="mb-4 text-muted-foreground">
@@ -92,7 +195,6 @@ export default function PreviewPanel() {
                 Generate an app using the prompt panel to see a live preview
                 here.
               </p>
-              <Button className="mt-4">Generate Sample App</Button>
             </div>
           )}
         </div>

@@ -1,47 +1,145 @@
-import React, { useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Download, RefreshCw } from "lucide-react";
+import { Download, RefreshCw, ZoomIn, ZoomOut } from "lucide-react";
 
 export default function FlowPanel() {
   const mermaidRef = useRef<HTMLDivElement>(null);
+  const [mermaidCode, setMermaidCode] = useState<string>(`graph TD
+  A[Landing Page] --> B{User Logged In?}
+  B -->|Yes| C[Dashboard]
+  B -->|No| D[Login Page]
+  D --> E[Sign Up]
+  D --> C
+  C --> F[Create Project]
+  C --> G[View Projects]
+  F --> H[App Builder]
+  G --> H`);
+  const [zoomLevel, setZoomLevel] = useState(1);
+  const [isLoading, setIsLoading] = useState(false);
 
+  // Listen for flow diagram updates
   useEffect(() => {
-    // In a real implementation, we would dynamically load mermaid.js
-    // and render the diagram based on the app structure
-    const renderMermaid = async () => {
-      try {
-        // This is a placeholder for actual mermaid.js integration
-        if (mermaidRef.current) {
-          mermaidRef.current.innerHTML = `
-            <div class="flex items-center justify-center h-full">
-              <div class="text-center">
-                <div class="text-sm text-muted-foreground mb-2">Flow Diagram Preview</div>
-                <div class="border rounded-lg p-4 bg-muted/30">
-                  <pre class="text-xs text-left">
-                    graph TD
-                      A[Landing Page] --> B{User Logged In?}
-                      B -->|Yes| C[Dashboard]
-                      B -->|No| D[Login Page]
-                      D --> E[Sign Up]
-                      D --> C
-                      C --> F[Create Project]
-                      C --> G[View Projects]
-                      F --> H[App Builder]
-                      G --> H
-                  </pre>
-                </div>
-              </div>
-            </div>
-          `;
-        }
-      } catch (error) {
-        console.error("Error rendering mermaid diagram:", error);
+    const handleFlowDiagramUpdate = async (event: CustomEvent) => {
+      setIsLoading(true);
+      const { flowCode } = event.detail;
+      if (flowCode) {
+        setMermaidCode(flowCode);
+        renderMermaid(flowCode);
       }
+      setTimeout(() => setIsLoading(false), 500);
     };
 
-    renderMermaid();
+    window.addEventListener(
+      "flow-diagram-update",
+      handleFlowDiagramUpdate as EventListener,
+    );
+    return () => {
+      window.removeEventListener(
+        "flow-diagram-update",
+        handleFlowDiagramUpdate as EventListener,
+      );
+    };
   }, []);
+
+  // Initial render
+  useEffect(() => {
+    renderMermaid(mermaidCode);
+  }, []);
+
+  const renderMermaid = async (code: string) => {
+    try {
+      // Dynamically import mermaid
+      const mermaid = await import("mermaid");
+      mermaid.default.initialize({
+        startOnLoad: true,
+        theme: "neutral",
+        securityLevel: "loose",
+      });
+
+      if (mermaidRef.current) {
+        // Clear previous content
+        mermaidRef.current.innerHTML = "";
+
+        // Create a unique ID for the diagram
+        const id = `mermaid-${Date.now()}`;
+
+        // Create container for the diagram
+        const container = document.createElement("div");
+        container.id = id;
+        container.style.width = "100%";
+        container.style.height = "100%";
+        container.style.display = "flex";
+        container.style.justifyContent = "center";
+        container.style.alignItems = "center";
+        mermaidRef.current.appendChild(container);
+
+        // Render the diagram
+        mermaid.default.render(id, code).then(({ svg }) => {
+          container.innerHTML = svg;
+        });
+      }
+    } catch (error) {
+      console.error("Error rendering mermaid diagram:", error);
+      if (mermaidRef.current) {
+        mermaidRef.current.innerHTML = `
+          <div class="flex items-center justify-center h-full">
+            <div class="text-center">
+              <div class="text-sm text-muted-foreground mb-2">Flow Diagram Preview</div>
+              <div class="border rounded-lg p-4 bg-muted/30">
+                <pre class="text-xs text-left">${mermaidCode}</pre>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+    }
+  };
+
+  const handleZoomIn = () => {
+    setZoomLevel((prev) => Math.min(prev + 0.1, 2));
+  };
+
+  const handleZoomOut = () => {
+    setZoomLevel((prev) => Math.max(prev - 0.1, 0.5));
+  };
+
+  const handleRefresh = () => {
+    setIsLoading(true);
+    renderMermaid(mermaidCode);
+    setTimeout(() => setIsLoading(false), 500);
+  };
+
+  const handleExport = () => {
+    const svgElement = mermaidRef.current?.querySelector("svg");
+    if (svgElement) {
+      const svgData = new XMLSerializer().serializeToString(svgElement);
+      const svgBlob = new Blob([svgData], {
+        type: "image/svg+xml;charset=utf-8",
+      });
+      const url = URL.createObjectURL(svgBlob);
+
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "flow-diagram.svg";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } else {
+      // Fallback to text export if SVG is not available
+      const blob = new Blob([mermaidCode], { type: "text/plain" });
+      const url = URL.createObjectURL(blob);
+
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "flow-diagram.txt";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+  };
 
   return (
     <div className="flex flex-col h-full bg-white rounded-lg border shadow-sm">
@@ -53,10 +151,26 @@ export default function FlowPanel() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleZoomOut}
+            disabled={zoomLevel <= 0.5}
+          >
+            <ZoomOut className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleZoomIn}
+            disabled={zoomLevel >= 2}
+          >
+            <ZoomIn className="h-4 w-4" />
+          </Button>
+          <Button variant="outline" size="sm" onClick={handleRefresh}>
             <RefreshCw className="h-4 w-4 mr-1" /> Refresh
           </Button>
-          <Button variant="outline" size="sm">
+          <Button variant="outline" size="sm" onClick={handleExport}>
             <Download className="h-4 w-4 mr-1" /> Export
           </Button>
         </div>
@@ -71,26 +185,29 @@ export default function FlowPanel() {
         </div>
 
         <TabsContent value="diagram" className="flex-1 p-3">
-          <div ref={mermaidRef} className="h-full overflow-auto" />
+          {isLoading ? (
+            <div className="h-full w-full flex items-center justify-center">
+              <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full"></div>
+            </div>
+          ) : (
+            <div
+              className="h-full overflow-auto flex items-center justify-center"
+              style={{
+                transform: `scale(${zoomLevel})`,
+                transformOrigin: "center center",
+              }}
+            >
+              <div ref={mermaidRef} className="w-full h-full" />
+            </div>
+          )}
         </TabsContent>
 
         <TabsContent value="code" className="p-3">
           <div className="border rounded bg-muted p-3">
-            <pre className="text-xs overflow-auto">
-              {`graph TD
-  A[Landing Page] --> B{User Logged In?}
-  B -->|Yes| C[Dashboard]
-  B -->|No| D[Login Page]
-  D --> E[Sign Up]
-  D --> C
-  C --> F[Create Project]
-  C --> G[View Projects]
-  F --> H[App Builder]
-  G --> H`}
-            </pre>
+            <pre className="text-xs overflow-auto">{mermaidCode}</pre>
           </div>
           <div className="mt-2 text-xs text-muted-foreground">
-            Edit the Mermaid code above to customize your flow diagram.
+            This is the Mermaid code used to generate the flow diagram.
           </div>
         </TabsContent>
       </Tabs>

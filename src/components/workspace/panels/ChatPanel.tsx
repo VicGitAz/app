@@ -1,9 +1,9 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Send } from "lucide-react";
+import { Send, Download } from "lucide-react";
 import { useAuth } from "../../../../supabase/auth";
 
 type Message = {
@@ -25,6 +25,43 @@ export default function ChatPanel() {
       timestamp: new Date(),
     },
   ]);
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
+
+  // Listen for chat updates from the prompt panel
+  useEffect(() => {
+    const handleChatUpdate = (event: CustomEvent) => {
+      const { id, content, sender, timestamp } = event.detail;
+      const newMessage: Message = {
+        id: id || Date.now().toString(),
+        content: content,
+        sender: sender,
+        timestamp: timestamp || new Date(),
+      };
+      setMessages((prev) => [...prev, newMessage]);
+    };
+
+    window.addEventListener("chat-update", handleChatUpdate as EventListener);
+    return () => {
+      window.removeEventListener(
+        "chat-update",
+        handleChatUpdate as EventListener,
+      );
+    };
+  }, []);
+
+  // Auto-scroll to bottom when messages change
+  useEffect(() => {
+    if (scrollAreaRef.current) {
+      const scrollContainer = scrollAreaRef.current.querySelector(
+        "[data-radix-scroll-area-viewport]",
+      );
+      if (scrollContainer) {
+        setTimeout(() => {
+          scrollContainer.scrollTop = scrollContainer.scrollHeight;
+        }, 100);
+      }
+    }
+  }, [messages]);
 
   const handleSendMessage = () => {
     if (!input.trim()) return;
@@ -53,16 +90,47 @@ export default function ChatPanel() {
     }, 1000);
   };
 
+  const handleExportChat = () => {
+    if (messages.length === 0) return;
+
+    const chatText = messages
+      .map(
+        (msg) =>
+          `[${msg.timestamp.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}] ${msg.sender === "user" ? "You" : "AI"}: ${msg.content}`,
+      )
+      .join("\n\n");
+
+    const blob = new Blob([chatText], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `chat-export-${new Date().toISOString().slice(0, 10)}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="flex flex-col h-full bg-white rounded-lg border shadow-sm">
-      <div className="p-3 border-b">
-        <h3 className="font-medium text-lg">AI Assistant</h3>
-        <p className="text-sm text-muted-foreground">
-          Chat with AI to refine your app
-        </p>
+      <div className="p-3 border-b flex justify-between items-center">
+        <div>
+          <h3 className="font-medium text-lg">AI Assistant</h3>
+          <p className="text-sm text-muted-foreground">
+            Chat with AI to refine your app
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleExportChat}
+          disabled={messages.length <= 1}
+        >
+          <Download className="h-4 w-4 mr-1" /> Export
+        </Button>
       </div>
 
-      <ScrollArea className="flex-1 p-4">
+      <ScrollArea className="flex-1 p-4" ref={scrollAreaRef}>
         <div className="space-y-4">
           {messages.map((message) => (
             <div
@@ -81,7 +149,7 @@ export default function ChatPanel() {
                     <span className="text-xs font-medium">AI Assistant</span>
                   </div>
                 )}
-                <p className="text-sm">{message.content}</p>
+                <p className="text-sm whitespace-pre-wrap">{message.content}</p>
                 <span className="text-xs opacity-70 block text-right mt-1">
                   {message.timestamp.toLocaleTimeString([], {
                     hour: "2-digit",
