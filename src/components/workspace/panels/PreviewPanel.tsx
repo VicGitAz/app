@@ -93,7 +93,7 @@ export default function PreviewPanel() {
 
     const blob = new Blob([generatedCode], { type: "text/html" });
     const url = URL.createObjectURL(blob);
-    document.open(url, "_blank");
+    window.open(url, "_blank");
   };
 
   return (
