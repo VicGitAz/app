@@ -17,6 +17,12 @@ export default function FlowPanel() {
   G --> H`);
   const [zoomLevel, setZoomLevel] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const [position, setPosition] = useState({ x: 0, y: 0 });
+  const [startPosition, setStartPosition] = useState({ x: 0, y: 0 });
+  const [activeTab, setActiveTab] = useState("diagram");
+  const diagramContainerRef = useRef<HTMLDivElement>(null);
+  const lastRenderedCodeRef = useRef<string>(mermaidCode);
 
   // Listen for flow diagram updates
   useEffect(() => {
@@ -37,29 +43,30 @@ export default function FlowPanel() {
       const { mermaidCode } = event.detail;
       if (mermaidCode) {
         setMermaidCode(mermaidCode);
+        lastRenderedCodeRef.current = mermaidCode;
       }
     };
 
     // Add both event listeners
     document.addEventListener(
       "flow-diagram-update",
-      handleFlowDiagramUpdate as EventListener
+      handleFlowDiagramUpdate as EventListener,
     );
 
     document.addEventListener(
       "mermaid-code-update",
-      handleMermaidCodeUpdate as EventListener
+      handleMermaidCodeUpdate as EventListener,
     );
 
     // Clean up both event listeners
     return () => {
       document.removeEventListener(
         "flow-diagram-update",
-        handleFlowDiagramUpdate as EventListener
+        handleFlowDiagramUpdate as EventListener,
       );
       document.removeEventListener(
         "mermaid-code-update",
-        handleMermaidCodeUpdate as EventListener
+        handleMermaidCodeUpdate as EventListener,
       );
     };
   }, []);
@@ -68,6 +75,13 @@ export default function FlowPanel() {
   useEffect(() => {
     renderMermaid(mermaidCode);
   }, []);
+
+  // Re-render when switching back to diagram tab
+  useEffect(() => {
+    if (activeTab === "diagram") {
+      renderMermaid(lastRenderedCodeRef.current || mermaidCode);
+    }
+  }, [activeTab]);
 
   const renderMermaid = async (code: string) => {
     try {
@@ -99,6 +113,8 @@ export default function FlowPanel() {
         // Render the diagram
         mermaid.default.render(id, code).then(({ svg }) => {
           container.innerHTML = svg;
+          // Store the successfully rendered code
+          lastRenderedCodeRef.current = code;
         });
       }
     } catch (error) {
@@ -109,7 +125,7 @@ export default function FlowPanel() {
             <div class="text-center">
               <div class="text-sm text-muted-foreground mb-2">Flow Diagram Preview</div>
               <div class="border rounded-lg p-4 bg-muted/30">
-                <pre class="text-xs text-left">${mermaidCode}</pre>
+                <pre class="text-xs text-left">${code}</pre>
               </div>
             </div>
           </div>
@@ -163,8 +179,30 @@ export default function FlowPanel() {
     }
   };
 
+  // Pan functionality
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (e.button !== 0) return; // Only left mouse button
+    setIsDragging(true);
+    setStartPosition({ x: e.clientX - position.x, y: e.clientY - position.y });
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isDragging) return;
+    const newX = e.clientX - startPosition.x;
+    const newY = e.clientY - startPosition.y;
+    setPosition({ x: newX, y: newY });
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+
+  const handleMouseLeave = () => {
+    setIsDragging(false);
+  };
+
   return (
-    <div className="flex flex-col h-full bg-white rounded-lg border shadow-sm">
+    <div className="flex flex-col h-full bg-white dark:bg-gray-900 rounded-lg border shadow-sm">
       <div className="p-3 border-b flex justify-between items-center">
         <div>
           <h3 className="font-medium text-lg">Flow Diagram</h3>
@@ -198,7 +236,12 @@ export default function FlowPanel() {
         </div>
       </div>
 
-      <Tabs defaultValue="diagram" className="flex-1">
+      <Tabs
+        defaultValue="diagram"
+        className="flex-1"
+        value={activeTab}
+        onValueChange={setActiveTab}
+      >
         <div className="px-3 pt-2">
           <TabsList>
             <TabsTrigger value="diagram">Diagram</TabsTrigger>
@@ -213,19 +256,30 @@ export default function FlowPanel() {
             </div>
           ) : (
             <div
-              className="h-full overflow-auto flex items-center justify-center"
-              style={{
-                transform: `scale(${zoomLevel})`,
-                transformOrigin: "center center",
-              }}
+              ref={diagramContainerRef}
+              className="h-full overflow-hidden relative"
+              onMouseDown={handleMouseDown}
+              onMouseMove={handleMouseMove}
+              onMouseUp={handleMouseUp}
+              onMouseLeave={handleMouseLeave}
+              style={{ cursor: isDragging ? "grabbing" : "grab" }}
             >
-              <div ref={mermaidRef} className="w-full h-full" />
+              <div
+                className="absolute"
+                style={{
+                  transform: `translate(${position.x}px, ${position.y}px) scale(${zoomLevel})`,
+                  transformOrigin: "center center",
+                  transition: isDragging ? "none" : "transform 0.1s ease-out",
+                }}
+              >
+                <div ref={mermaidRef} className="w-full h-full" />
+              </div>
             </div>
           )}
         </TabsContent>
 
         <TabsContent value="code" className="p-3">
-          <div className="border rounded bg-muted p-3">
+          <div className="border rounded bg-muted dark:bg-gray-800 p-3">
             <pre className="text-xs overflow-auto">{mermaidCode}</pre>
           </div>
           <div className="mt-2 text-xs text-muted-foreground">

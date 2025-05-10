@@ -6,6 +6,7 @@ import { BrowserRouter } from "react-router-dom";
 import { AuthProvider } from "../supabase/auth.tsx";
 import { AIProvider } from "./lib/ai-context";
 import { Toaster } from "./components/ui/toaster";
+import { ThemeProvider } from "./components/theme-provider";
 
 import { TempoDevtools } from "tempo-devtools";
 TempoDevtools.init();
@@ -14,13 +15,15 @@ const basename = import.meta.env.BASE_URL;
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <BrowserRouter basename={basename}>
-      <AuthProvider>
-        <AIProvider>
-          <App />
-          <Toaster />
-        </AIProvider>
-      </AuthProvider>
-    </BrowserRouter>
+    <ThemeProvider defaultTheme="light">
+      <BrowserRouter basename={basename}>
+        <AuthProvider>
+          <AIProvider>
+            <App />
+            <Toaster />
+          </AIProvider>
+        </AuthProvider>
+      </BrowserRouter>
+    </ThemeProvider>
   </React.StrictMode>,
 );

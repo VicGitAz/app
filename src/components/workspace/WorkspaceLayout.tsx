@@ -4,26 +4,41 @@ import {
   ResizablePanel,
   ResizablePanelGroup,
 } from "@/components/ui/resizable";
-import PromptPanel from "./panels/PromptPanel";
 import PreviewPanel from "./panels/PreviewPanel";
 import CodePanel from "./panels/CodePanel";
 import FlowPanel from "./panels/FlowPanel";
 import ChatPanel from "./panels/ChatPanel";
+import Sidebar from "./Sidebar";
 
 export default function WorkspaceLayout() {
+  const [selectedFeatures, setSelectedFeatures] = useState<string[]>([
+    "responsive",
+  ]);
+
+  const toggleFeature = (feature: string) => {
+    setSelectedFeatures((prev) =>
+      prev.includes(feature)
+        ? prev.filter((f) => f !== feature)
+        : [...prev, feature],
+    );
+  };
+
   return (
-    <div className="h-screen w-full bg-muted/20 overflow-hidden">
+    <div className="h-screen w-full bg-muted/20 dark:bg-gray-950 overflow-hidden">
       <ResizablePanelGroup direction="horizontal" className="h-full">
+        {/* Sidebar */}
+        <ResizablePanel defaultSize={5} minSize={5} maxSize={5}>
+          <Sidebar
+            selectedFeatures={selectedFeatures}
+            toggleFeature={toggleFeature}
+          />
+        </ResizablePanel>
+
+        <ResizableHandle />
+
+        {/* Main Content */}
         <ResizablePanel defaultSize={25} minSize={20}>
-          <ResizablePanelGroup direction="vertical">
-            <ResizablePanel defaultSize={50}>
-              <PromptPanel />
-            </ResizablePanel>
-            <ResizableHandle />
-            <ResizablePanel defaultSize={50}>
-              <ChatPanel />
-            </ResizablePanel>
-          </ResizablePanelGroup>
+          <ChatPanel />
         </ResizablePanel>
 
         <ResizableHandle />
