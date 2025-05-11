@@ -152,22 +152,45 @@ export class GeminiProvider {
 
   async generateWebApp(prompt: string): Promise<GeminiResponse> {
     try {
-      // First generate the web app code and description
+      // First, extract project configuration from the prompt
+      const configPrompt = `Based on the following user requirements, determine the best configuration for a web application project. Return ONLY a JSON object with the following structure:
+
+{
+  "type": "frontend" or "backend" or "fullstack",
+  "language": "javascript" or "typescript",
+  "frontend": {
+    "framework": "react" or "nextjs",
+    "styling": "tailwind" or "css",
+    "features": [array of features like "auth", "api", "darkmode", etc.]
+  },
+  "backend": {
+    "framework": "express" or "nest" or other backend framework,
+    "database": "mongodb" or "postgres" or "supabase" or "none"
+  },
+  "name": "project-name",
+  "description": "Brief project description"
+}
+
+User requirements: ${prompt}
+
+Only return the JSON object, no explanation or other text.`;
+
+      // Generate the web app code and description
       const webAppPrompt = `Create a complete web application based on the following requirements.
 Please provide:
 1. A brief explanation of the web application (this will be returned as text)
-2. The complete code in properly formatted code blocks
+2. The complete code in properly formatted code blocks for either React or Next.js
 
 User requirements: ${prompt}
 
 Structure your response like this:
 - First, write a paragraph or two explaining the web application, its features, and how it works
-- Then provide the complete code for a single-page application with:
-  a. HTML structure
-  b. CSS styles (Tailwind preferred)
-  c. JavaScript functionality
+- Then provide the complete code with proper imports and component structure
+- Use Tailwind CSS for styling
+- Include proper routing (React Router for React, App Router for Next.js)
+- Organize code into separate components
 
-IMPORTANT: Return the complete code in a single HTML file with embedded CSS and JS.`;
+IMPORTANT: Return the code in properly formatted code blocks for each file.`;
 
       const webAppResponse = await this.generateContent(webAppPrompt);
 

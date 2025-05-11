@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   ResizableHandle,
   ResizablePanel,
@@ -8,12 +8,22 @@ import PreviewPanel from "./panels/PreviewPanel";
 import CodePanel from "./panels/CodePanel";
 import FlowPanel from "./panels/FlowPanel";
 import ChatPanel from "./panels/ChatPanel";
+import TerminalPanel from "./panels/TerminalPanel";
 import Sidebar from "./Sidebar";
+import {
+  ProjectGenerator,
+  ProjectConfig,
+  ProjectSession,
+} from "@/lib/project-generator";
+import { TerminalService } from "@/lib/terminal-service";
 
 export default function WorkspaceLayout() {
   const [selectedFeatures, setSelectedFeatures] = useState<string[]>([
     "responsive",
   ]);
+  const [currentSession, setCurrentSession] = useState<ProjectSession | null>(
+    null,
+  );
 
   const toggleFeature = (feature: string) => {
     setSelectedFeatures((prev) =>
@@ -22,6 +32,34 @@ export default function WorkspaceLayout() {
         : [...prev, feature],
     );
   };
+
+  // Listen for project creation events
+  useEffect(() => {
+    const handleProjectCreate = (event: CustomEvent) => {
+      const { config } = event.detail;
+      const session = ProjectGenerator.createSession(config as ProjectConfig);
+      setCurrentSession(session);
+
+      // Generate and execute initialization commands
+      const commands = ProjectGenerator.generateInitCommands(session);
+      TerminalService.executeCommands(commands, session);
+
+      // Generate file structure
+      const files = ProjectGenerator.generateFileStructure(session);
+      TerminalService.createFiles(session, files);
+    };
+
+    document.addEventListener(
+      "project-create",
+      handleProjectCreate as EventListener,
+    );
+    return () => {
+      document.removeEventListener(
+        "project-create",
+        handleProjectCreate as EventListener,
+      );
+    };
+  }, []);
 
   return (
     <div className="h-screen w-full bg-muted/20 dark:bg-gray-950 overflow-hidden">
@@ -45,18 +83,26 @@ export default function WorkspaceLayout() {
 
         <ResizablePanel defaultSize={50}>
           <ResizablePanelGroup direction="vertical">
-            <ResizablePanel defaultSize={50}>
+            <ResizablePanel defaultSize={40}>
               <PreviewPanel />
             </ResizablePanel>
             <ResizableHandle />
-            <ResizablePanel defaultSize={50}>
-              <ResizablePanelGroup direction="horizontal">
-                <ResizablePanel defaultSize={50}>
-                  <CodePanel />
+            <ResizablePanel defaultSize={60}>
+              <ResizablePanelGroup direction="vertical">
+                <ResizablePanel defaultSize={70}>
+                  <ResizablePanelGroup direction="horizontal">
+                    <ResizablePanel defaultSize={50}>
+                      <CodePanel />
+                    </ResizablePanel>
+                    <ResizableHandle />
+                    <ResizablePanel defaultSize={50}>
+                      <FlowPanel />
+                    </ResizablePanel>
+                  </ResizablePanelGroup>
                 </ResizablePanel>
                 <ResizableHandle />
-                <ResizablePanel defaultSize={50}>
-                  <FlowPanel />
+                <ResizablePanel defaultSize={30}>
+                  <TerminalPanel />
                 </ResizablePanel>
               </ResizablePanelGroup>
             </ResizablePanel>

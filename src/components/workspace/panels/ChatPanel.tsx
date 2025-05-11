@@ -68,7 +68,7 @@ export default function ChatPanel() {
     return () => {
       document.removeEventListener(
         "chat-update",
-        handleChatUpdate as EventListener
+        handleChatUpdate as EventListener,
       );
     };
   }, []);
@@ -77,7 +77,7 @@ export default function ChatPanel() {
   useEffect(() => {
     if (scrollAreaRef.current) {
       const scrollContainer = scrollAreaRef.current.querySelector(
-        "[data-radix-scroll-area-viewport]"
+        "[data-radix-scroll-area-viewport]",
       );
       if (scrollContainer) {
         setTimeout(() => {
@@ -100,7 +100,7 @@ export default function ChatPanel() {
     setSelectedFeatures((prev) =>
       prev.includes(feature)
         ? prev.filter((f) => f !== feature)
-        : [...prev, feature]
+        : [...prev, feature],
     );
   };
 
@@ -115,8 +115,8 @@ export default function ChatPanel() {
         prev.map((msg) =>
           msg.id === loadingMessageRef.current
             ? { ...msg, statusText: newStatusText }
-            : msg
-        )
+            : msg,
+        ),
       );
     }
   };
@@ -165,12 +165,18 @@ export default function ChatPanel() {
     loadingIntervalRef.current = window.setInterval(updateLoadingMessage, 2000);
 
     try {
-      // Enhance prompt with selected features
+      // Enhance prompt with selected features and framework preferences
       const enhancedPrompt = `
         Create a web application with the following requirements:\n
         ${userQuery}\n
         \n
         Include these features: ${selectedFeatures.join(", ")}\n
+        Use either React or Next.js as the frontend framework, depending on the requirements.\n
+        If the app needs server-side rendering, API routes, or would benefit from file-based routing, use Next.js.\n
+        If it's a simpler client-side application, use React with React Router.\n
+        Always use Tailwind CSS for styling.\n
+        For backend needs, use Express.js with TypeScript.\n
+        Organize the code into proper components and follow best practices for the chosen framework.\n
       `;
 
       // Send to AI and get response
@@ -182,6 +188,29 @@ export default function ChatPanel() {
         loadingIntervalRef.current = null;
       }
 
+      // Create a project session based on the response
+      // This would normally be extracted from the AI response
+      // For now, we'll create a default configuration
+      const projectConfig = {
+        type: "frontend",
+        language: "typescript",
+        frontend: {
+          framework: userQuery.toLowerCase().includes("next")
+            ? "nextjs"
+            : "react",
+          styling: "tailwind",
+          features: selectedFeatures,
+        },
+        name: "my-app",
+        description: "Generated with AI Web App Generator",
+      };
+
+      // Dispatch event to create a new project
+      const projectEvent = new CustomEvent("project-create", {
+        detail: { config: projectConfig },
+      });
+      document.dispatchEvent(projectEvent);
+
       // Remove loading message and add actual response
       setMessages((prev) =>
         prev
@@ -192,7 +221,7 @@ export default function ChatPanel() {
             sender: "ai",
             timestamp: new Date(),
             status: "complete",
-          })
+          }),
       );
 
       // Send the generated code to the preview panel
@@ -251,7 +280,7 @@ export default function ChatPanel() {
             sender: "ai",
             timestamp: new Date(),
             status: "error",
-          })
+          }),
       );
       console.error("Error generating response:", error);
     }
@@ -268,7 +297,7 @@ export default function ChatPanel() {
           `[${msg.timestamp.toLocaleTimeString([], {
             hour: "2-digit",
             minute: "2-digit",
-          })}] ${msg.sender === "user" ? "You" : "AI"}: ${msg.content}`
+          })}] ${msg.sender === "user" ? "You" : "AI"}: ${msg.content}`,
       )
       .join("\n\n");
 
@@ -492,7 +521,7 @@ export default function ChatPanel() {
                     className="p-3 bg-gray-50 dark:bg-gray-800 rounded-md cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700"
                     onClick={() =>
                       setInput(
-                        "Create a personal portfolio website with a hero section, about me, skills, projects, and contact form."
+                        "Create a personal portfolio website with a hero section, about me, skills, projects, and contact form.",
                       )
                     }
                   >
@@ -505,7 +534,7 @@ export default function ChatPanel() {
                     className="p-3 bg-gray-50 dark:bg-gray-800 rounded-md cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700"
                     onClick={() =>
                       setInput(
-                        "Build a task management app with the ability to create, edit, and delete tasks. Include task categories and priority levels."
+                        "Build a task management app with the ability to create, edit, and delete tasks. Include task categories and priority levels.",
                       )
                     }
                   >
@@ -518,7 +547,7 @@ export default function ChatPanel() {
                     className="p-3 bg-gray-50 dark:bg-gray-800 rounded-md cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700"
                     onClick={() =>
                       setInput(
-                        "Create a weather dashboard that shows current weather and 5-day forecast for a city. Include temperature, humidity, and wind speed."
+                        "Create a weather dashboard that shows current weather and 5-day forecast for a city. Include temperature, humidity, and wind speed.",
                       )
                     }
                   >
