@@ -12,7 +12,6 @@ import {
   Save,
 } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
-import TerminalPanel from "./TerminalPanel";
 import dynamic from "next/dynamic";
 import {
   ResizableHandle,
@@ -51,6 +50,27 @@ export default function CodePanel() {
   useEffect(() => {
     selectedFileRef.current = selectedFile;
   }, [selectedFile]);
+
+  // Update editor theme based on document theme
+  useEffect(() => {
+    const isDarkMode = document.documentElement.classList.contains("dark");
+    setEditorTheme(isDarkMode ? "vs-dark" : "vs-light");
+
+    // Create a mutation observer to watch for class changes on the html element
+    const observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        if (mutation.attributeName === "class") {
+          const isDarkMode =
+            document.documentElement.classList.contains("dark");
+          setEditorTheme(isDarkMode ? "vs-dark" : "vs-light");
+        }
+      });
+    });
+
+    observer.observe(document.documentElement, { attributes: true });
+
+    return () => observer.disconnect();
+  }, []);
 
   const getDeviconClass = (filename) => {
     const ext = filename.split(".").pop().toLowerCase();
@@ -291,7 +311,7 @@ export default function CodePanel() {
   };
 
   return (
-    <div className="flex flex-col h-full bg-white rounded-lg border shadow-sm overflow-hidden">
+    <div className="flex flex-col h-full bg-background rounded-lg border shadow-sm overflow-hidden">
       <div className="p-3 border-b flex justify-between items-center">
         <div>
           <h3 className="font-medium text-lg">Code Editor</h3>
@@ -300,9 +320,6 @@ export default function CodePanel() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={toggleTheme}>
-            {editorTheme === "vs-light" ? "Dark Mode" : "Light Mode"}
-          </Button>
           {/* Copy and Download buttons now work with the currently active tab's content */}
           <Button
             variant="outline"
@@ -337,7 +354,7 @@ export default function CodePanel() {
                     : "w-48 opacity-100"
                 }`}
               >
-                <div className="p-2 overflow-auto h-full">
+                <div className="p-2 overflow-auto h-full bg-background">
                   <h4 className="text-sm font-medium mb-2 px-2">Files</h4>
                   <div className="space-y-1">
                     {Object.keys(parsedFiles).map((file) => (
@@ -391,8 +408,7 @@ export default function CodePanel() {
             </div>
 
             <div className="flex-1 flex flex-col">
-              {/* Editor header with maximize control */}
-              <div className="flex items-center justify-between bg-gray-100 dark:bg-gray-800 px-2 border-b">
+              <div className="flex items-center justify-between bg-gray-100 dark:bg-background px-2 border-b">
                 <div className="flex items-center overflow-x-auto">
                   {openFiles.map((file) => (
                     <div
@@ -442,11 +458,11 @@ export default function CodePanel() {
                   onMount={handleEditorDidMount}
                   options={{
                     minimap: { enabled: true },
-                    scrollBeyondLastLine: false,
+                    scrollBeyondLastLine: true,
                     fontSize: 14,
                     wordWrap: "on",
                     automaticLayout: true,
-                    readOnly: false, // Keep editable
+                    readOnly: false,
                     lineNumbers: "on",
                     folding: true,
                     renderLineHighlight: "all",
@@ -467,27 +483,6 @@ export default function CodePanel() {
                 />
                 {/* Removed the conditional rendering for the "No files open" message */}
                 {/* Replaced with Monaco editor always rendering */}
-              </div>
-            </div>
-          </div>
-        </ResizablePanel>
-
-        {/* Resize handle */}
-        <ResizableHandle withHandle />
-
-        {/* Terminal Section */}
-        <ResizablePanel defaultSize={40} minSize={1}>
-          <div className="flex relative transition-all duration-200 h-full">
-            <div className="w-full h-full relative">
-              {/* Terminal header with maximize control */}
-              <div className="flex items-center justify-between px-2 py-1 bg-gray-800 border-b border-gray-700">
-                <span className="text-sm font-medium text-gray-200">
-                  Terminal
-                </span>
-              </div>
-
-              <div className="h-full">
-                <TerminalPanel className="h-full w-full" />
               </div>
             </div>
           </div>

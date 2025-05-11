@@ -70,7 +70,7 @@ export default function AIConfigModal() {
       <DialogTrigger asChild>
         <Button
           variant={isConfigured ? "outline" : "default"}
-          className="gap-2 dark:bg-[#1a1a1a]"
+          className="gap-2 bg-background"
         >
           <Brain className="h-4 w-4" />
         </Button>

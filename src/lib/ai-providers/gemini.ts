@@ -1,4 +1,7 @@
+// Updated GeminiProvider.ts with proper config extraction
+
 import { ProjectConfig } from "../project-generator";
+
 export interface GeminiResponse {
   text: string;
   code?: string;
@@ -58,15 +61,98 @@ export class GeminiProvider {
     let extractedCode = "";
     const tempText = fullText.replace(/```mermaid[\s\S]*?```/g, ""); // Remove mermaid blocks first
 
-    // Match all remaining code blocks
-    while ((match = codeRegex.exec(tempText)) !== null) {
-      const codeContent = match[0]
-        .replace(/```[^\s]*?\s*\n/, "")
-        .replace(/\s*```$/, "");
-      extractedCode += codeContent + "\n\n";
+    // Process code blocks to ensure file information is preserved
+    const codeBlocks = tempText.match(codeRegex);
+    if (codeBlocks) {
+      for (const block of codeBlocks) {
+        // Check for filename comments before code blocks
+        const fileCommentMatch = block.match(
+          /```[^\s]*\s*\n(?:\/\/|#)\s*([^\n]+\.[a-zA-Z0-9]+)/
+        );
+
+        // Extract the code content without the backticks
+        let codeContent = block
+          .replace(/```[^\s]*?\s*\n/, "")
+          .replace(/\s*```$/, "");
+
+        // Add filename comment if found
+        if (fileCommentMatch && fileCommentMatch[1]) {
+          codeContent = `// ${fileCommentMatch[1]}\n${codeContent}`;
+        }
+
+        extractedCode += codeContent + "\n\n";
+      }
     }
 
     return extractedCode.trim();
+  }
+
+  // Extract project configuration from text
+  private extractProjectConfig(fullText: string): ProjectConfig | undefined {
+    // Default config - always define this first to ensure we have a fallback
+    const defaultConfig: ProjectConfig = {
+      type: "frontend",
+      language: "typescript",
+      frontend: {
+        framework: "react",
+        styling: "tailwind",
+        features: [],
+      },
+      name: "my-app",
+      description: "Web application generated from prompt",
+    };
+
+    try {
+      // Try to find JSON configuration in the text
+      const configRegex =
+        /\{[\s\S]*?"type"\s*:\s*"(?:frontend|backend|fullstack)"[\s\S]*?\}/;
+      const configMatch = fullText.match(configRegex);
+
+      if (configMatch) {
+        try {
+          const configText = configMatch[0];
+          // Additional validation: check if the JSON is properly formed
+          // Count braces to ensure they're balanced
+          let openBraces = 0;
+          let closeBraces = 0;
+
+          for (const char of configText) {
+            if (char === "{") openBraces++;
+            if (char === "}") closeBraces++;
+          }
+
+          if (openBraces !== closeBraces) {
+            console.warn(
+              "Unbalanced braces in config JSON, using default config"
+            );
+            return defaultConfig;
+          }
+
+          const config = JSON.parse(configText);
+          // Validate minimum required properties
+          if (config.type && config.language) {
+            return {
+              ...defaultConfig, // Start with defaults for safety
+              ...config, // Override with parsed values
+              frontend: {
+                ...defaultConfig.frontend, // Ensure frontend defaults
+                ...(config.frontend || {}), // Override with any frontend config
+              },
+              name: config.name || defaultConfig.name, // Ensure name exists
+            };
+          }
+        } catch (jsonError) {
+          console.error("Error parsing JSON config:", jsonError);
+          // Continue with default config on JSON parse error
+        }
+      }
+    } catch (error) {
+      console.error("Error extracting project config:", error);
+      // Continue with default config on error
+    }
+
+    // Return default config if none found or on error
+    return defaultConfig;
   }
 
   // Extract only mermaid code block
@@ -126,10 +212,14 @@ export class GeminiProvider {
       const fullText =
         data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "";
 
+      // Extract config from the full text response
+      const config = this.extractProjectConfig(fullText);
+
       return {
         text: this.extractTextOnly(fullText),
         code: this.extractCodeBlocks(fullText) || undefined,
         mermaidCode: this.extractMermaidCode(fullText),
+        config: config,
       };
     } catch (error) {
       console.error("Error calling Gemini API:", error);
@@ -137,6 +227,17 @@ export class GeminiProvider {
         text: "",
         error:
           error instanceof Error ? error.message : "Unknown error occurred",
+        // Always provide a default config to prevent undefined errors
+        config: {
+          type: "frontend",
+          language: "typescript",
+          name: "error-project",
+          frontend: {
+            framework: "react",
+            styling: "tailwind",
+            features: [],
+          },
+        } as ProjectConfig,
       };
     }
   }
@@ -166,35 +267,100 @@ export class GeminiProvider {
       // Generate configuration based on prompt
       const configResponse = await this.generateContent(configPrompt);
 
-      // Parse the configuration JSON
-      let config;
-      try {
-        // Extract JSON from the response text
-        const configText = configResponse.text || "{}";
-        // Find JSON object in the text (in case there's extra text)
-        const jsonMatch = configText.match(/\{[\s\S]*\}/);
-        const jsonString = jsonMatch ? jsonMatch[0] : "{}";
-        config = JSON.parse(jsonString);
-      } catch (error) {
-        console.error("Error parsing configuration:", error);
+      // Default config
+      const defaultConfig: ProjectConfig = {
+        type: "frontend",
+        language: "typescript",
+        frontend: {
+          framework: "react",
+          styling: "tailwind",
+          features: [],
+        },
+        name: "my-app",
+        description: "Web application generated from user prompt",
+      };
+
+      // Always ensure we have a config object
+      let config = defaultConfig;
+
+      // Try to use the extracted config if available
+      if (configResponse.config) {
         config = {
-          type: "frontend",
-          language: "typescript",
+          ...defaultConfig,
+          ...configResponse.config,
           frontend: {
-            framework: "react",
-            styling: "tailwind",
-            features: [],
+            ...defaultConfig.frontend,
+            ...(configResponse.config.frontend || {}),
           },
-          name: "default-project",
-          description: "Web application generated from user prompt",
+          name: configResponse.config.name || defaultConfig.name,
         };
       }
+      // Otherwise try to extract it from the text
+      else {
+        try {
+          const configText = configResponse.text || "{}";
+
+          // Find JSON object in the text
+          const jsonRegex =
+            /\{[\s\S]*?"type"\s*:\s*"(?:frontend|backend|fullstack)"[\s\S]*?\}/;
+          const jsonMatch = configText.match(jsonRegex);
+
+          if (jsonMatch) {
+            const jsonString = jsonMatch[0];
+
+            // Check for balanced braces to avoid malformed JSON
+            let openBraces = 0;
+            let closeBraces = 0;
+
+            for (const char of jsonString) {
+              if (char === "{") openBraces++;
+              if (char === "}") closeBraces++;
+            }
+
+            if (openBraces === closeBraces) {
+              try {
+                const parsedConfig = JSON.parse(jsonString);
+
+                // Validate minimum required properties and merge with defaults
+                if (parsedConfig.type && parsedConfig.language) {
+                  config = {
+                    ...defaultConfig,
+                    ...parsedConfig,
+                    name: parsedConfig.name || defaultConfig.name,
+                    frontend: {
+                      ...defaultConfig.frontend,
+                      ...(parsedConfig.frontend || {}),
+                    },
+                    ...(parsedConfig.backend
+                      ? {
+                          backend: {
+                            ...(defaultConfig.backend || {}),
+                            ...parsedConfig.backend,
+                          },
+                        }
+                      : {}),
+                  };
+                }
+              } catch (jsonError) {
+                console.error("Error parsing config JSON:", jsonError);
+                // Continue with default config
+              }
+            }
+          }
+        } catch (error) {
+          console.error("Error extracting config from text:", error);
+          // Continue with default config
+        }
+      }
+
+      // Ensure we have a valid config at this point
+      console.log("Using project configuration:", config);
 
       // Generate the web app code and description using the extracted configuration
       const webAppPrompt = `Create a complete web application based on the following requirements and configuration:
-      
+  
       User requirements: ${prompt}
-      
+  
       Project configuration:
       - Project type: ${config.type}
       - Language: ${config.language}
@@ -210,10 +376,19 @@ export class GeminiProvider {
           : ""
       }
       - Project name: ${config.name}
-      
+  
       Structure your response like this:
       - First, write a paragraph or two explaining the web application, its features, and how it works
-      - Then provide the complete code with proper imports and component structure
+      - Then provide the complete code with proper file names as comments before each code block, like:
+  
+      // src/App.tsx
+      import React from 'react';
+      // Rest of code
+  
+      // src/components/Header.tsx
+      import React from 'react';
+      // Rest of code
+  
       - Use ${config.frontend?.styling || "Tailwind CSS"} for styling
       - Include proper routing (${
         config.frontend?.framework === "nextjs"
@@ -221,13 +396,13 @@ export class GeminiProvider {
           : "React Router for React"
       })
       - Organize code into separate components
-      IMPORTANT: Return the code in properly formatted code blocks for each file.`;
+      IMPORTANT: Always prepend each code block with a comment containing the file path, like "// src/App.tsx".`;
 
       const webAppResponse = await this.generateContent(webAppPrompt);
 
       // Then generate a mermaid diagram based on the generated code and configuration
       const mermaidPrompt = `Generate a Mermaid diagram that visualizes the key components and flow of the following web application.
-      
+  
       Project configuration:
       - Project type: ${config.type}
       - Frontend framework: ${config.frontend?.framework || "react"}
@@ -237,17 +412,17 @@ export class GeminiProvider {
       - Database: ${config.backend?.database || "none"}`
           : ""
       }
-      
+  
       Application code:
       \`\`\`
       ${webAppResponse.code || "No code generated."}
       \`\`\`
-      
+  
       Use graph TD notation with proper syntax. Use sequential letters (A, B, C, etc.) as node IDs, followed by descriptive labels in square brackets.
       The diagram should follow this pattern:
       A[ComponentName] --> B[ComponentName];
       B -- action --> C[ComponentName];
-      
+  
       Include both component connections with arrows and labeled actions between components.
       Show the data flow between frontend and backend components if applicable.
       Only return the Mermaid diagram code without any explanation. The diagram should be detailed and correctly formatted.`;
@@ -290,25 +465,33 @@ export class GeminiProvider {
         }
       }
 
-      // Return combined response with guaranteed fields
+      // Always include the config in the response
       return {
         text: webAppResponse.text || "",
         code: webAppResponse.code || "",
         mermaidCode: finalMermaidCode,
-        config: config,
+        config: config, // Ensure config is always included
         error: webAppResponse.error || mermaidResponse.error,
       };
     } catch (error) {
       console.error("Error generating web app:", error);
+      // Always provide a fallback config to prevent undefined errors
+      const fallbackConfig: ProjectConfig = {
+        type: "frontend",
+        language: "typescript",
+        name: "error-project",
+        frontend: {
+          framework: "react",
+          styling: "tailwind",
+          features: [],
+        },
+      };
+
       return {
         text: "Failed to generate the web application.",
         code: "",
         mermaidCode: "graph TD\n  A[Error] --> B[Error Occurred]",
-        config: {
-          type: "frontend",
-          language: "typescript",
-          name: "error-project",
-        },
+        config: fallbackConfig,
         error:
           error instanceof Error ? error.message : "Unknown error occurred",
       };

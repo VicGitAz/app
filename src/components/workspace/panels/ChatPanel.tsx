@@ -175,6 +175,20 @@ export default function ChatPanel() {
       });
       document.dispatchEvent(projectEvent);
 
+      if (response.config) {
+        try {
+          // Create a project event with the full response
+          const projectEvent = new CustomEvent("project-create", {
+            detail: {
+              response: response, // Pass the full response object
+            },
+          });
+          document.dispatchEvent(projectEvent);
+        } catch (error) {
+          console.error("Error creating project:", error);
+        }
+      }
+
       // Final update: Complete response
       setMessages((prev) =>
         prev.map((msg) =>
@@ -282,7 +296,7 @@ export default function ChatPanel() {
   };
 
   return (
-    <div className="flex flex-col h-full bg-background dark:bg-[#1a1a1a] rounded-lg border shadow-sm">
+    <div className="flex flex-col h-full bg-background rounded-lg border shadow-sm">
       <div className="p-3 border-b flex justify-between items-center">
         <div>
           <h3 className="font-medium text-lg">WebSmith</h3>
@@ -296,7 +310,7 @@ export default function ChatPanel() {
             size="sm"
             onClick={handleExportChat}
             disabled={messages.length <= 1}
-            className="dark:bg-[#1a1a1a]"
+            className="bg-background"
           >
             <Download className="h-4 w-4 mr-1" /> Export
           </Button>
