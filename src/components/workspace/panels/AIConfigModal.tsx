@@ -19,6 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useAI } from "@/lib/ai-context";
+import { Brain } from "lucide-react";
 
 export default function AIConfigModal() {
   const { configureClient, provider, setProvider, isConfigured } = useAI();
@@ -69,9 +70,9 @@ export default function AIConfigModal() {
       <DialogTrigger asChild>
         <Button
           variant={isConfigured ? "outline" : "default"}
-          className="gap-2"
+          className="gap-2 dark:bg-[#1a1a1a]"
         >
-          {isConfigured ? "Update AI Config" : "Configure AI"}
+          <Brain className="h-4 w-4" />
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[425px]">
@@ -122,7 +123,7 @@ export default function AIConfigModal() {
                     >
                       {modelOption.label}
                     </SelectItem>
-                  ),
+                  )
                 )}
               </SelectContent>
             </Select>
